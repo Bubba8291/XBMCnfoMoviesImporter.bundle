@@ -26,6 +26,8 @@ from dateutil.parser import parse
 import traceback
 import urllib
 import urlparse
+import certifi
+import requests
 import subtitles
 
 if sys.version_info < (3, 0):
@@ -42,6 +44,10 @@ PlexAgent = Agent.Movies
 MediaProxy = Proxy.Media
 Metadata = MetadataSearchResult
 Trailer = TrailerObject
+
+HTTP_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.12.4) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.1 Safari/603.1.30"
+}
 
 COUNTRY_CODES = {
     'Australia': 'Australia,AU',
@@ -927,6 +933,28 @@ class XBMCNFO(PlexAgent):
                         except:
                             log.info('\t-')
                     log.info('---------------------')
+                # Posters
+                poster_sort = 1000 - len(metadata.posters.keys())
+                if poster_sort < 1:
+                    poster_sort = 1
+
+                log.debug('Thumbs: {thumbs}'.format(thumbs=nfo_xml.xpath('thumb')))
+                for thumb in nfo_xml.xpath('thumb'):
+                    aspect = thumb.get('aspect', None)
+                    thumb = thumb.text
+                    if aspect == 'poster':
+                        poster_key = thumb
+                        log.debug('Poster keys: {keys}'.format(keys=metadata.posters.keys()))
+                        if poster_key not in metadata.posters.keys():
+                            valid_names = metadata.posters.keys()
+                            r = requests.get(thumb, headers=HTTP_HEADERS, verify=certifi.where())
+                            if r.status_code == 200:
+                                valid_names.insert(0, poster_key)
+                                metadata.posters[poster_key] = Proxy.Media(r.content, sort_order=poster_sort)
+                                metadata.posters.validate_keys(valid_names)
+                                log.debug('Poster set for {media_item.title}'.format(media_item=media))
+                            else:
+                                log.debug('Poster download failed! Status code: {code}'.format(code=r.status_code))
             else:
                 log.info('ERROR: No <movie> tag in {nfo}.'
                          ' Aborting!'.format(nfo=nfo_file))
